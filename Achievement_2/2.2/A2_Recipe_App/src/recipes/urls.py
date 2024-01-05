@@ -1,8 +1,10 @@
-from django.contrib import admin
 from django.urls import path
-from django.urls import include
+from .views import recipes_home, RecipesDetailView, RecipesListView
+
+app_name = "recipes"
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('', include('recipes.urls'))
+    path("", recipes_home, name="recipes_home"),
+    path("recipes/", RecipesListView.as_view(), name="recipes_list"),
+    path("recipes/<pk>", RecipesDetailView.as_view(), name="recipes_detail"),
 ]

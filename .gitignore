@@ -7,3 +7,5 @@ __pycache/__
 
 # Database
 *.sqlite3
+
+settings.py

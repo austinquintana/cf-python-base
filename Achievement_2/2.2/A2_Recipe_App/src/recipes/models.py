@@ -6,6 +6,9 @@ from django.shortcuts import reverse
 
 
 class Recipe(models.Model):
+    class Meta:
+        ordering = ["title"]
+
     title = models.CharField(max_length=50)
     cooking_time = models.PositiveIntegerField(help_text="In minutes")
     description = models.TextField()

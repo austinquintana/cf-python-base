@@ -8,4 +8,4 @@ __pycache/__
 # Database
 *.sqlite3
 
-settings.py
+Achievement_2/2.2/A2_Recipe_App/src/recipe_project/settings.py

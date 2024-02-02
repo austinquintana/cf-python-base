@@ -1,24 +1,25 @@
 from django.urls import path
-from .views import (
-    recipes_home,
-    RecipesDetailView,
-    RecipesListView,
-    export_recipes_csv,
-    export_single_recipe_csv,
-    generate_chart,
-)
+from . import views
+from django.contrib.auth.decorators import login_required
 
-app_name = "recipes"
+app_name = 'recipes'
 
 urlpatterns = [
-    path("", recipes_home, name="recipes_home"),
-    path("recipes/", RecipesListView.as_view(), name="recipes_list"),
-    path("recipes/<pk>", RecipesDetailView.as_view(), name="recipes_detail"),
-    path("recipes/export/", export_recipes_csv, name="export_csv"),
-    path("generate-chart/", generate_chart, name="generate_chart"),
-    path(
-        "export_single_recipe/<int:recipe_id>/",
-        export_single_recipe_csv,
-        name="export_single_recipe_csv",
-    ),
+    path('', views.home, name='home'),
+    path('recipes_list/', views.RecipesListView.as_view(), name='recipes_list'),
+    path('recipes/<int:pk>/', views.RecipesDetailView.as_view(), name='recipes_details'),
+    path('profile/<int:pk>/', views.profile, name='profile'),
+    path('login/', views.login_user, name='login'),
+    path('logout/', views.logout_user, name='logout'),  # corrected URL pattern
+    path('register/', views.register_user, name='register'),
+    path('create/<int:pk>/', login_required(views.create_recipe), name='create'),
+    path('update_recipe/<int:pk>/', views.update_recipe, name='update_recipe'),
+    path('delete_recipe/<int:pk>/', views.delete_recipe, name='delete_recipe'),
+    path('update_user/<int:pk>/', login_required(views.update_user), name='update_user'),
+    path('delete_user/<int:pk>/', views.delete_user, name='delete_user'),
+    path('search_recipes/', views.search_recipes, name='search_recipes'),
+    path('recipe/<int:pk>/export-pdf/', views.export_recipe_as_pdf, name='export_recipe_as_pdf'),
+    path('about/', views.about, name='about'),
 ]
+
+

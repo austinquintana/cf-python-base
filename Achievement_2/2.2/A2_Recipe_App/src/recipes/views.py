@@ -1,38 +1,187 @@
-from io import BytesIO
-import base64
-import csv
-from typing import Any, Dict
-from django.shortcuts import render
-from django.shortcuts import get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView
-from .models import Recipe
-from django.contrib.auth.mixins import LoginRequiredMixin
-from .forms import RecipeSearchForm
-import pandas as pd
-from django.http import HttpResponse, JsonResponse, Http404
-import matplotlib.pyplot as plt
+from .models import Recipe, Profile, RecipeIngredient, Ingredient
 from django.contrib import messages
-from django.core.paginator import Paginator
+from django.http import Http404
+from .forms import SignUpForm
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from .forms import RecipeForm, UserUpdateForm, RecipeSearchForm, ContactForm
+from django.contrib.auth.models import User
+import pandas as pd
+from django.db.models import Q
+import matplotlib.pyplot as plt
+import base64
+from io import BytesIO
+from functools import reduce
+from operator import and_
+from django.http import HttpResponse
+from django.template.loader import get_template
+from xhtml2pdf import pisa
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.http import Http404
+from functools import reduce
+from django.db.models import Q
 
 
-# Create your views here.
-def recipes_home(request):
-    return render(request, "recipes/recipes_home.html")
+@login_required
+def create_recipe(request, pk):
+    form = RecipeForm(request.POST or None, request.FILES or None)
+
+    if request.method == 'POST':
+        recipe_ingredients_str = request.POST.get('recipe_ingredients', '') 
+        
+        if recipe_ingredients_str:
+            recipe_ingredients_list = [ingredient.strip() for ingredient in recipe_ingredients_str.split(",")]
+
+        if form.is_valid():
+            recipe = form.save(commit=False)
+            recipe_ingredients_count = 0
+            profile = Profile.objects.get(user_id=pk)
+            recipe.user = profile.user  # Update this line
+            recipe.save()
+
+            for ingredient_name in recipe_ingredients_list:
+                ingredient, created = Ingredient.objects.get_or_create(name=ingredient_name)
+
+                if created:
+                    recipe_ingredients_count += 1
+                recipe.ingredients_used.create(ingredient=ingredient)
+
+            recipe.difficulty = recipe.calculate_difficulty()
+            recipe.save()
+
+            messages.success(request, "Recipe added successfully.")
+            return redirect('recipes:profile', pk=pk)
+        else:
+            # Print form errors for debugging
+            print(form.errors)
+
+            messages.error(request, "Form validation failed. Please check the entered data.")
+
+            # Add this line to return the form with errors
+            return render(request, 'recipes/profile.html', {'form': form})
+
+    # Add this line to print the form information to the console
+    print(form)
+
+    return render(request, 'recipes/profile.html', {'form': form})
 
 
-def render_chart(chart_type, data, **kwargs):
+
+@login_required
+def update_recipe(request, pk):
+    recipe = get_object_or_404(Recipe, id=pk)
+   
+    if request.user == recipe.user:
+        form = RecipeForm(request.POST or None, request.FILES or None, instance=recipe)
+        
+        if request.method == 'POST':
+            if form.is_valid():
+                updated_recipe = form.save(commit=False)
+                updated_recipe.user = recipe.user  # Update this line
+                updated_recipe.save()
+                updated_recipe.ingredients_used.all().delete()  # Update this line
+                recipe_ingredients_str = request.POST.get('recipe_ingredients', '')
+                recipe_ingredients_list = [ingredient.strip() for ingredient in recipe_ingredients_str.split(",")]
+
+                for ingredient_name in recipe_ingredients_list:
+                    ingredient, created = Ingredient.objects.get_or_create(name=ingredient_name)
+                    updated_recipe.ingredients_used.create(ingredient=ingredient)
+
+                updated_recipe.difficulty = updated_recipe.calculate_difficulty()
+                updated_recipe.save()
+
+                messages.success(request, "Recipe updated successfully.")
+                return redirect('recipes:profile', pk=recipe.user.id)
+            else:
+                messages.error(request, "Form validation failed. Please check the entered data.")
+ 
+        current_ingredients = ', '.join(recipe.ingredients_used.values_list('ingredient__name', flat=True))
+
+        return render(request, "recipes/update_recipe.html", {'form': form, 'recipe': recipe, 'recipe_ingredients': current_ingredients})
+    else:
+        messages.error(request, "This recipe is not yours.")
+        return redirect('recipes:profile')
+
+def delete_recipe(request, pk):
+    if request.user.is_authenticated:
+        recipe = get_object_or_404(Recipe, id=pk)
+        
+        if request.user.username == recipe.user.username:
+            recipe.delete()
+            messages.success(request, "The recipe has been deleted.")
+            return redirect('recipes:profile', pk=request.user.id)
+        else:
+            messages.error(request, "You don't have permission to delete this recipe.")
+    else:
+        messages.error(request, "You must be logged in to delete a recipe.")
+    
+    return redirect('recipes:home')
+
+def home(request):
+   return render(request, 'recipes/home.html', {})
+
+class RecipesListView(ListView):
+    model = Recipe
+    template_name = "recipes/recipes_list.html"
+    context_object_name = "recipes"
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        recipe_name = self.request.GET.get("Recipe_Name")
+        ingredients = self.request.GET.getlist("Ingredients")
+        combined_query = Q()
+
+        if recipe_name:
+            combined_query &= Q(title__icontains=recipe_name)
+
+        if ingredients:
+            for ingredient in ingredients:
+                combined_query &= Q(recipe_ingredients__ingredient__name__icontains=ingredient)
+        queryset = queryset.filter(combined_query).distinct()
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["form"] = RecipeSearchForm(self.request.GET)
+
+        if not context["recipes"]:
+            error_message = "There are no recipes with that combination of ingredients."
+            messages.error(self.request, error_message)
+            context["error_message"] = error_message
+
+        if "chart_type" in self.request.GET:
+            chart_type = self.request.GET.get("chart_type")
+            queryset = self.get_queryset()
+            data = pd.DataFrame.from_records(queryset.values('title', 'cooking_time'))
+
+            chart_data = {"title": data.get("title", []), "cooking_time": data.get("cooking_time", [])}
+
+            if chart_type == "#1":
+                chart_data["labels"] = chart_data.get("title")
+            elif chart_type == "#2":
+                chart_data["labels"] = chart_data.get("title")
+            else:
+                chart_data["labels"] = None
+            chart_image = render_chart(self.request, chart_type, chart_data)
+            context["chart_image"] = chart_image
+
+        return context
+    
+def render_chart(request, chart_type, data, **kwargs):
     plt.switch_backend("AGG")
     fig = plt.figure(figsize=(12, 8), dpi=100)
     ax = fig.add_subplot(111)
 
     if chart_type == "#1":
-        # Bar Chart
         plt.title("Cooking Time by Recipe", fontsize=20)
         plt.bar(data["title"], data["cooking_time"])
         plt.xlabel("Recipes", fontsize=16)
         plt.ylabel("Cooking Time (min)", fontsize=16)
     elif chart_type == "#2":
-        # Pie Chart
         plt.title("Recipes Cooking Time Comparison", fontsize=20)
         labels = kwargs.get("labels")
         plt.pie(data["cooking_time"], labels=None, autopct="%1.1f%%")
@@ -43,10 +192,9 @@ def render_chart(chart_type, data, **kwargs):
             fontsize=12,
         )
     elif chart_type == "#3":
-        # Line Chart
         plt.title("Cooking Time by Recipe", fontsize=20)
-        x_values = data["title"].to_numpy()  # Convert to numpy array
-        y_values = data["cooking_time"].to_numpy()  # Convert to numpy array
+        x_values = data["title"].to_numpy()  
+        y_values = data["cooking_time"].to_numpy()  
         plt.plot(x_values, y_values)
         plt.xlabel("Recipes", fontsize=16)
         plt.ylabel("Cooking Time (min)", fontsize=16)
@@ -55,7 +203,6 @@ def render_chart(chart_type, data, **kwargs):
 
     plt.tight_layout(pad=3.0)
 
-    # Convert the plot to an image
     buffer = BytesIO()
     plt.savefig(buffer, format="png")
     buffer.seek(0)
@@ -63,191 +210,201 @@ def render_chart(chart_type, data, **kwargs):
 
     return chart_image
 
-
-class RecipesListView(LoginRequiredMixin, ListView):
+class RecipesDetailView(DetailView):
     model = Recipe
-    template_name = "recipes/recipes_list.html"
-    context_object_name = "recipes"
-    paginate_by = 10
+    template_name = "recipes/recipes_details.html"
+    context_object_name = "recipe"
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        ingredients = RecipeIngredient.objects.filter(recipe=self.object).values_list('ingredient__name', flat=True)
+        context['ingredients'] = ingredients
+        
+        return context
+    
+def register_user(request):
+    form = SignUpForm()  
+    if request.method == "POST":
+        form = SignUpForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            # Create a profile for the user
+            Profile.objects.create(user=user)
+            # Continue with login and redirect
+            username = form.cleaned_data['username']
+            password = form.cleaned_data['password1']
+            user = authenticate(username=username, password=password)
+            login(request, user)
+            messages.success(request, ("You have successfully registered!"))
+            return redirect('recipes:home')
+    return render(request, "recipes/register.html", {'form': form})
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        recipe_name = self.request.GET.get("Recipe_Name")
-        ingredients = self.request.GET.getlist("Ingredients")
+
+def login_user(request):
+    if request.method == "POST":
+        username = request.POST['username']
+        password = request.POST['password']
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)  
+            messages.success(request, "You are logged in.")
+            return redirect('recipes:home')
+        else:
+            messages.error(request, "Ups, something went wrong. Please try again.")
+            return render(request, "recipes/login.html", {})
+    else:
+        return render(request, "recipes/login.html", {})
+    
+def logout_user(request):
+    logout(request)
+    messages.success(request, "Logged out successfully.")
+    return redirect('recipes:home')
+
+@login_required
+def profile(request, pk):
+    if request.user.is_authenticated:
+        try:
+            profile = Profile.objects.get(user_id=pk)
+            user = profile.user
+            user_recipes = Recipe.objects.filter(user=user)
+
+            form = RecipeForm()  # Instantiate the form separately
+
+            context = {
+                "profile": profile,
+                "user_recipes": user_recipes,
+                "form": form,
+            }
+
+            return render(request, "recipes/profile.html", context)
+        except Profile.DoesNotExist:
+            raise Http404("Profile does not exist")
+    else:
+        messages.error(request, "You must be logged in to access this!")
+        return redirect('recipes:login')
+
+
+
+@login_required
+def update_user(request, pk):
+    if request.user.is_authenticated:
+        current_user = User.objects.get(id=pk)
+        if request.method == "POST":
+            user_form = UserUpdateForm(request.POST, instance=current_user)
+
+            if user_form.is_valid():
+                user_form.save()
+                login(request, current_user)
+                messages.success(request, "Your profile has been updated.")
+                return redirect('recipes:home')
+            else:
+                messages.error(request, "There was an error updating your profile. Please try again.")
+        else:
+            user_form = UserUpdateForm(instance=current_user)
+            return render(request, "recipes/update_user.html", {'user_form': user_form, 'profile': current_user.profile })
+    else:
+        messages.success(request, "You have to be logged in.")
+        return redirect('recipes:home')
+
+def delete_user(request, pk):
+    if request.user.is_authenticated:
+        user = get_object_or_404(User, id=pk)
+        
+        if request.user == user:
+            user.delete()
+            messages.success(request, "Your account has been successfully deleted.")
+            return redirect('recipes:home')
+        else:
+            messages.error(request, "Something went wrong. Please try again.")
+    else:
+        messages.error(request, "You must be logged in to perform this task.")
+    
+    return redirect('recipes:home')
+
+@login_required
+def search_recipes(request):
+    if request.method == 'POST':
+        recipe_name = request.POST.get('Recipe_Name')
+        ingredients = request.POST.getlist('Ingredients')
+        chart_type = request.POST.get('chart_type')
+        queryset = Recipe.objects.all()
 
         if recipe_name:
             queryset = queryset.filter(title__icontains=recipe_name)
 
         if ingredients:
-            for ingredient in ingredients:
-                queryset = queryset.filter(ingredients__id=ingredient)
+            ingredient_filters = [Q(ingredients_used__ingredient__name__icontains=ingredient) for ingredient in ingredients]
+            combined_filter = reduce(and_, ingredient_filters)
+            queryset = queryset.filter(combined_filter).distinct()
 
-        # Check if there are any recipes in the queryset
-        if not queryset.exists():
-            # Add a message to the user indicating no recipes found
-            messages.warning(
-                self.request,
-                "There are no recipes with that combination of ingredients.",
-            )
-            # Return an empty queryset
-            queryset = Recipe.objects.none()
+        recipes = queryset
 
-        return queryset
+        chart_image = None
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+        if chart_type and recipes:
+            chart_data = {
+                'labels': [recipe.title for recipe in recipes],
+                'data': [recipe.cooking_time for recipe in recipes],
+            }
+            chart_image = render_chart(request, chart_type, chart_data)
 
-        try:
-            # Convert the QuerySet to a pandas DataFrame
-            df = pd.DataFrame.from_records(context["recipes"].values())
-            context["recipes_df"] = df
+        if not recipes:
+            messages.error(request, "There are no recipes with that combination of ingredients.")
+            chart_image = None  # Corrected line
 
-            context["form"] = RecipeSearchForm(self.request.GET)
-
-            # Generate and pass the chart paths to the context
-            chart_type = self.request.GET.get("chart_type")
-            if chart_type:
-                chart_data = {"title": df["title"], "cooking_time": df["cooking_time"]}
-                if chart_type == "#1":
-                    chart_data["labels"] = df["title"]
-                elif chart_type == "#2":
-                    chart_data["labels"] = df["title"]
-                else:
-                    chart_data["labels"] = None
-
-                chart_image = render_chart(chart_type, chart_data)
-                context["chart_image"] = chart_image
-
-        except KeyError:
-            # If KeyError occurs, handle the error and set the appropriate context variables
-            context["recipes"] = []  # Set an empty list to recipes
-            context[
-                "error_message"
-            ] = "There are no recipes with that combination of ingredients."
-
-        # Pagination
-        paginator = Paginator(context["recipes"], self.paginate_by)
-        page_number = self.request.GET.get("page")
-        page_obj = paginator.get_page(page_number)
-        context["page_obj"] = page_obj
-
-        return context
+        return render(request, 'recipes/recipes_list.html', {
+            'recipes': recipes,
+            'chart_image': chart_image,
+            'chart_type': chart_type,
+        })
 
 
-def export_recipes_csv(request):
-    # Get the filter parameters from the request
-    recipe_name = request.GET.get("Recipe_Name")
-    ingredients = request.GET.getlist("Ingredients")
+    return render(request, 'recipes/recipes_list.html')
 
-    # Filter the Recipe objects based on the request parameters
-    queryset = Recipe.objects.all()
+@login_required
+def export_recipe_as_pdf(request, pk):
+    recipe = get_object_or_404(Recipe, id=pk)
 
-    if recipe_name:
-        queryset = queryset.filter(title__icontains=recipe_name)
+    template_path = 'recipes/pdf_template.html'
 
-    if ingredients:
-        for ingredient in ingredients:
-            # Check if the ingredient parameter is empty
-            if ingredient:
-                queryset = queryset.filter(ingredients__id=ingredient)
+    context = {
+        'recipe': recipe,
+    }
 
-    # Convert the filtered QuerySet to a list of dictionaries
-    recipe_data = list(queryset.values())
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{recipe.title}.pdf"'
 
-    # Get the related Ingredient data for each recipe
-    for data in recipe_data:
-        recipe = Recipe.objects.get(pk=data["id"])
-        data["ingredients"] = ", ".join(
-            [ingredient.name for ingredient in recipe.ingredients.all()]
-        )
+    template = get_template(template_path)
+    html = template.render(context)
+    pisa_status = pisa.CreatePDF(html, dest=response)
 
-    # Create the DataFrame from the list of dictionaries
-    df = pd.DataFrame.from_records(recipe_data)
-
-    response = HttpResponse(content_type="text/csv")
-    response["Content-Disposition"] = 'attachment; filename="recipes.csv"'
-    df.to_csv(path_or_buf=response, index=False)
-    return response
-
-
-def export_single_recipe_csv(request, recipe_id):
-    # Fetch the specific recipe
-    recipe = get_object_or_404(Recipe, pk=recipe_id)
-
-    # Create your CSV response
-    response = HttpResponse(content_type="text/csv")
-    response["Content-Disposition"] = f'attachment; filename="{recipe.title}.csv"'
-
-    writer = csv.writer(response)
-
-    # Write the headers
-    writer.writerow(
-        ["Title", "Cooking Time (min)", "Description", "Difficulty", "Ingredients"]
-    )
-
-    # Gather ingredients
-    ingredients = ", ".join(
-        [ingredient.name for ingredient in recipe.ingredients.all()]
-    )
-
-    # Write the recipe data
-    writer.writerow(
-        [
-            recipe.title,
-            recipe.cooking_time,
-            recipe.description,
-            recipe.difficulty,
-            ingredients,
-        ]
-    )
+    if pisa_status.err:
+        return HttpResponse('We had some errors <pre>' + html + '</pre>')
 
     return response
 
+def about(request):
+    if request.method == 'POST':
+        form = ContactForm(request.POST)
 
-def generate_chart(request):
-    chart_type = request.GET.get("chart_type")
-    recipe_name = request.GET.get("Recipe_Name")
-    ingredients = request.GET.getlist("Ingredients")
+        if form.is_valid():
+            name = form.cleaned_data['name']
+            email = form.cleaned_data['email']
+            content = form.cleaned_data['content']
 
-    # Filter the Recipe objects based on the request parameters
-    queryset = Recipe.objects.all()
+            html = render_to_string('recipes/contact_form.html', {
+                'name': name,
+                'email': email,
+                'content': content
+            })
 
-    if recipe_name:
-        queryset = queryset.filter(title__icontains=recipe_name)
-
-    if ingredients:
-        for ingredient in ingredients:
-            # Check if the ingredient parameter is empty
-            if ingredient:
-                queryset = queryset.filter(ingredients__id=ingredient)
-
-    # Convert the filtered QuerySet to a list of dictionaries
-    recipe_data = list(queryset.values())
-
-    # Get the related Ingredient data for each recipe
-    for data in recipe_data:
-        recipe = Recipe.objects.get(pk=data["id"])
-        data["ingredients"] = ", ".join(
-            [ingredient.name for ingredient in recipe.ingredients.all()]
-        )
-
-    # Create the DataFrame from the list of dictionaries
-    df = pd.DataFrame.from_records(recipe_data)
-
-    chart_data = {"title": df["title"], "cooking_time": df["cooking_time"]}
-    if chart_type == "#1":
-        chart_data["labels"] = df["title"]
-    elif chart_type == "#2":
-        # For Pie Chart, labels should be the recipe titles, and not the cooking times
-        chart_data["labels"] = df["title"]
+            send_mail('The contact form subject', 'This is the message', 'torbalansky@gmail.com', ['torbalansky@gmail.com'], html_message=html)
+            messages.success(request, "Message sent. I will get back to you as soon as possible.")
+            return redirect('recipes:about')
     else:
-        chart_data["labels"] = None
+        form = ContactForm()
 
-    chart_image = render_chart(chart_type, chart_data)
-    return JsonResponse({"chart_image": chart_image})
-
-
-class RecipesDetailView(LoginRequiredMixin, DetailView):
-    model = Recipe
-    template_name = "recipes/recipes_detail.html"
-    context_object_name = "recipe"
+    return render(request, 'recipes/about.html', {
+        'form': form
+    })

@@ -1,0 +1,192 @@
+{% extends 'recipes/base.html' %}
+{% load static %}
+{% block content %}
+<style>
+      body {
+        position: relative;
+        background-image: url("{% static 'recipes/images/background.jpg' %}");
+        background-size:cover;
+        background-position: center;
+        width: 100%;
+        height: 100%;
+    }
+
+    .label-width {
+        min-width: 150px; 
+        display: inline-block;
+        margin-bottom: 20px;
+    }
+    .user-box {
+        background-color: rgba(0, 0, 0, 0.7);
+        padding: 10px;
+        border-radius: 10px;
+        color: white;
+        font-family: 'Nunito', sans-serif;
+        margin-top: 20px;
+        display: flex;
+        align-items: center;
+        text-align: center;
+        width:fit-content;
+    }
+
+    .user-box table td, .user-box table th {
+        padding: 5px;
+    }
+
+    .user-box table {
+        width: 100%;
+    }
+
+    .user-box h4 {
+        padding: 10px;
+        text-align: center;
+    }
+
+    .user-container-buttons {
+        margin-top: 10px;
+    }
+
+    .btn.btn-primary.update-profile {
+        margin-bottom: 10px;
+    }
+
+    @media screen and (max-width: 767px) {
+        .user-box {
+            flex-direction: column;
+        }
+
+        .btn.btn-primary.update-profile {
+            margin-bottom: 0;
+        }
+
+        .col-md-6 {
+            margin-top: 30px;
+        }
+    }
+
+    .card-body.create {
+        background-color: rgb(64, 64, 64);
+        color: rgb(231, 229, 229);
+        font-weight: bold;
+    }
+</style>
+<div class="container">
+  <div class="user-box">
+    <table>
+            <th colspan="4"><h4>Manage your account:</h4></th>
+            <tr>
+                <td>Username:</td>
+                <td>{{ profile.user.username }}</td>
+              </tr>
+              <tr>
+                <td>Email:</td>
+                <td>{{ profile.user.email }}</td>
+              </tr>
+              <tr>
+                <td>First name:</td>
+                <td>{{ profile.user.first_name }}</td>
+              </tr>
+              <tr>
+                <td>Last name:</td>
+                <td>{{ profile.user.last_name }}</td>
+              </tr>
+      </table>
+    <div class="user-container-buttons">
+      {% if request.user.id == profile.user.id %}
+          <a href="{% url 'recipes:update_user' user.id %}" class="btn btn-primary update-profile">Update Account</a>
+          <button id="deleteAccount" class="btn btn-danger update-profile">Delete Account</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="container my-5">
+  <div class="row">
+      <div class="col-md-6">
+          <div class="card">
+              <div class="card-header bg-secondary text-white">
+                  <h3 class="mb-0">Create a New Recipe:</h3>
+              </div>
+              <div class="card-body create">
+                  <form method="post" enctype="multipart/form-data">
+                      {% csrf_token %}
+                      <div class="form-group">
+                          <label for="id_title" class="label-width">Title:</label>
+                          {{ form.title }}
+                      </div>
+                      <div class="form-group">
+                          <label for="id_description" class="label-width">Description:</label>
+                          {{ form.description }}
+                      </div>
+                      <div class="form-group">
+                          <label for="id_cooking_time" class="label-width">Cooking Time(min):</label>
+                          {{ form.cooking_time }}
+                      </div>
+                      <div class="form-group">
+                          <label for="id_recipe_ingredients" class="label-width">Ingredients:</label>
+                          {{ form.recipe_ingredients }}
+                      </div>
+                      <div class="form-group">
+                          <label for="id_instructions" class="label-width">Instructions:</label>
+                          {{ form.instructions }}
+                      </div>
+                      <div class="form-group">
+                        <label for="id_pic" class="label-width">Image:</label>
+                        {{ form.pic }}
+                      </div>                    
+                      <div class="form-group text-center">
+                        <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Create Recipe</button>
+                    </div>                    
+                  </form>
+              </div>
+          </div>
+      </div>
+    
+      <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h3 class="mb-0">Your Recipes</h3>
+            </div>
+            <div class="card-body">
+                {% for recipe in user_recipes %}
+                <div class="card mb-2 bg-dark text-white">
+                    <div class="row g-0">
+                        <div class="col-md-4 d-flex align-items-center">
+                            <img src="{{ recipe.pic.url }}" class="img-fluid" alt="{{ recipe.title }}" style="width: 150px; height: 150px; margin-left: 5px; border-radius: 50%;">
+                        </div>
+                        <div class="col-md-8 bg-dark text-white">
+                            <div class="card-body" style="color: rgb(230, 226, 226); font-weight: lighter;">
+                                <h5 class="card-title">{{ recipe.title }}</h5>
+                                <p class="card-text">{{ recipe.description }}</p>
+                                <p class="card-text"><small style="color: rgb(213, 209, 209); font-weight: lighter;">Last updated {{ recipe.created_at|timesince }} ago</small></p>
+                                {% if request.user.username == profile.user.username %}
+                                    <a href="{% url 'recipes:recipes_details' recipe.id %}" title="View">
+                                      <span style="color: white; margin-right: 10px;">
+                                        <i class="fa-solid fa-eye"></i></span></a>
+                                    <a href="{% url 'recipes:update_recipe' recipe.id %}" title="Edit">
+                                      <span style="color: rgb(3, 248, 252); margin-right: 10px;">
+                                        <i class="fas fa-pen-to-square"></i></span></a>
+                                    <a href="{% url 'recipes:delete_recipe' recipe.id %}" title="Delete">
+                                      <span style="color: rgb(242, 156, 156);">
+                                        <i class="fas fa-trash"></i></span></a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>    
+  </div>
+</div>
+
+  <script>
+    document.getElementById('deleteAccount').addEventListener('click', function() {
+        if (confirm('Are you sure you want to delete your account?')) {
+            window.location.href = "{% url 'recipes:delete_user' user.id %}";
+        }
+    });
+  </script>
+
+{% endblock %}

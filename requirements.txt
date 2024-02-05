@@ -27,3 +27,4 @@ virtualenv==20.24.5
 virtualenvwrapper-win==1.2.7
 wcwidth==0.2.8
 psycopg2-binary==2.8.6
+gunicorn==21.2.0

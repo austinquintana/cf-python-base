@@ -37,7 +37,8 @@ class Recipe(models.Model):
     description = models.TextField()
     difficulty = models.CharField(max_length=20, default="TBD")
     pic = models.ImageField(upload_to="recipes", default="no_picture.jpeg")
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recipes")  # Add this line
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recipes")  
+    created_at = models.DateTimeField(auto_now_add=True) 
 
     def calculate_difficulty(self):
         from recipeingredients.models import RecipeIngredient

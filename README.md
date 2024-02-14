@@ -16,6 +16,8 @@ Note: Run these commands in the terminal from the desired directory.
 
 1. Clone the repo 
 
+gh repo clone austinquintana/cf-python-base
+
 2. Install the requirements 
 
 pip install -r requirements.txt

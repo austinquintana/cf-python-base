@@ -29,3 +29,9 @@ python manage.py migrate
 4. Run the local server 
 
 python manage.py runserver 
+
+### Key Features 
+
+1. Search for recipes by Name or Ingredient
+2. View helpful graphs about which recipes need improvement 
+3. Save your recipes in your profile page

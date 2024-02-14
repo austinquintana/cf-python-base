@@ -1,1 +1,1 @@
-web: gunicorn recipe_project.wsgi --log-file -
+web: gunicorn Achievement_2.2.2.A2_Recipe_App.src.recipe_project.wsgi --log-file -

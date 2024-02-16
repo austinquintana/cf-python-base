@@ -217,11 +217,12 @@ class RecipesDetailView(DetailView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
+    
         ingredients = RecipeIngredient.objects.filter(recipe=self.object).values_list('ingredient__name', flat=True)
         context['ingredients'] = ingredients
-        
+    
         return context
+
     
 def register_user(request):
     form = SignUpForm()  

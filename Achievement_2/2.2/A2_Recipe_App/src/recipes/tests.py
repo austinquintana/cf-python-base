@@ -1,5 +1,5 @@
 from django.test import TestCase
-from .models import Ingredient, Recipe
+from .models import Ingredient, Recipe, RecipeIngredient
 from django.urls import reverse
 from django.contrib.auth.models import User
 from .forms import RecipeSearchForm 
@@ -13,9 +13,8 @@ class RecipeModelTest(TestCase):
             title="Sample Recipe",
             description="A test recipe",
             cooking_time=30,
-            instructions="Test instructions",
             difficulty="Hard",
-            author=self.user,  
+            user=self.user,  
         )
         self.recipe.ingredients.add(self.ingredient1, self.ingredient2)
 
@@ -64,8 +63,8 @@ class IngredientModelTest(TestCase):
 class RecipesListViewTest(TestCase):
     def test_recipes_list_view(self):
         user = User.objects.create_user(username="testuser", password="testpassword")
-        recipe1 = Recipe.objects.create(title="Recipe 1", description="Description 1", cooking_time=30, author=user)
-        recipe2 = Recipe.objects.create(title="Recipe 2", description="Description 2", cooking_time=40, author=user)
+        recipe1 = Recipe.objects.create(title="Recipe 1", description="Description 1", cooking_time=30, user=user)
+        recipe2 = Recipe.objects.create(title="Recipe 2", description="Description 2", cooking_time=40, user=user)
         url = reverse('recipes:recipes_list')
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
@@ -76,7 +75,7 @@ class RecipesListViewTest(TestCase):
 class RecipesDetailViewTest(TestCase):
     def test_recipe_detail_view(self):
         user = User.objects.create_user(username="testuser", password="testpassword")
-        recipe = Recipe.objects.create(title="Recipe", description="Description", cooking_time=25, author=user)
+        recipe = Recipe.objects.create(title="Recipe", description="Description", cooking_time=25, user=user)
         url = reverse('recipes:recipes_details', args=[recipe.pk])  # Correct the URL name
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
@@ -85,12 +84,13 @@ class RecipesDetailViewTest(TestCase):
 class RecipeSearchFormTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        user = User.objects.create_user(username="testuser", password="testpassword")  
         ingredient1 = Ingredient.objects.create(name="Ingredient 1")
         ingredient2 = Ingredient.objects.create(name="Ingredient 2")
-        recipe1 = Recipe.objects.create(title="Recipe 1", cooking_time=30)
-        recipe2 = Recipe.objects.create(title="Recipe 2", cooking_time=60)
-        recipe1.ingredients.add(ingredient1)
-        recipe2.ingredients.add(ingredient2)
+        recipe1 = Recipe.objects.create(title="Recipe 1", cooking_time=30, user=user)  
+        recipe2 = Recipe.objects.create(title="Recipe 2", cooking_time=60, user=user)  
+        RecipeIngredient.objects.create(recipe=recipe1, ingredient=ingredient1)
+        RecipeIngredient.objects.create(recipe=recipe2, ingredient=ingredient2)
 
         
         for i in range(3, 13):  

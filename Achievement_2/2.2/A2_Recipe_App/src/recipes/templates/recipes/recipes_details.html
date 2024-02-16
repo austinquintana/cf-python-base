@@ -11,10 +11,11 @@
 
             <h4 class="mt-4">Ingredients:</h4>
             <ul>
-                {% for ingredient in recipe.ingredients.all %}
-                    <li>{{ ingredient.name }}</li>
+                {% for ingredient in ingredients %}
+                    <li>{{ ingredient }}</li>
                 {% endfor %}
             </ul>
+
             <h4 class="mt-4">Cooking time (min):</h4>
             <p>{{ recipe.cooking_time }}</p>
 
@@ -25,7 +26,7 @@
             <p>{{ recipe.difficulty }}</p>
 
             <h4 class="mt-4">Created by:</h4>
-            <p>{{ recipe.author }}</p>
+            <p>{{ recipe.user }}</p>
         </div>
     </div>
 </div>

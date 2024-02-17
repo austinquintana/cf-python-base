@@ -35,6 +35,8 @@ def create_recipe(request, pk):
         if recipe_ingredients_str:
             recipe_ingredients_list = [ingredient.strip() for ingredient in recipe_ingredients_str.split(",")]
 
+        print("Recipe Ingredients List:", recipe_ingredients_list)
+
         if form.is_valid():
             recipe = form.save(commit=False)
             recipe_ingredients_count = 0
@@ -44,6 +46,8 @@ def create_recipe(request, pk):
 
             for ingredient_name in recipe_ingredients_list:
                 ingredient, created = Ingredient.objects.get_or_create(name=ingredient_name)
+                print("Ingredient:", ingredient.name)  # Debugging output
+                print("Created:", created)  # Debugging output
 
                 if created:
                     recipe_ingredients_count += 1
@@ -216,9 +220,18 @@ class RecipesDetailView(DetailView):
     context_object_name = "recipe"
     
     def get_context_data(self, **kwargs):
+        print("Inside get_context_data")  # Add this line for debugging
         context = super().get_context_data(**kwargs)
-    
-        ingredients = RecipeIngredient.objects.filter(recipe=self.object).values_list('ingredient__name', flat=True)
+        
+        # Add this line to print the title of the recipe
+        print("Recipe:", self.object.title)
+
+        # Add this line to print the SQL query
+        ingredients_query = RecipeIngredient.objects.filter(recipe=self.object)
+        print("Ingredients Query:", ingredients_query.query)
+
+        ingredients = ingredients_query.values_list('ingredient__name', flat=True)
+        print("Ingredients:", ingredients)  # Add this line for debugging
         context['ingredients'] = ingredients
     
         return context

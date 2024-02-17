@@ -35,8 +35,6 @@ def create_recipe(request, pk):
         if recipe_ingredients_str:
             recipe_ingredients_list = [ingredient.strip() for ingredient in recipe_ingredients_str.split(",")]
 
-        print("Recipe Ingredients List:", recipe_ingredients_list)
-
         if form.is_valid():
             recipe = form.save(commit=False)
             recipe_ingredients_count = 0
@@ -46,8 +44,6 @@ def create_recipe(request, pk):
 
             for ingredient_name in recipe_ingredients_list:
                 ingredient, created = Ingredient.objects.get_or_create(name=ingredient_name)
-                print("Ingredient:", ingredient.name)  # Debugging output
-                print("Created:", created)  # Debugging output
 
                 if created:
                     recipe_ingredients_count += 1
@@ -59,16 +55,11 @@ def create_recipe(request, pk):
             messages.success(request, "Recipe added successfully.")
             return redirect('recipes:profile', pk=pk)
         else:
-            # Print form errors for debugging
-            print(form.errors)
 
             messages.error(request, "Form validation failed. Please check the entered data.")
 
             # Add this line to return the form with errors
             return render(request, 'recipes/profile.html', {'form': form})
-
-    # Add this line to print the form information to the console
-    print(form)
 
     return render(request, 'recipes/profile.html', {'form': form})
 
@@ -220,18 +211,10 @@ class RecipesDetailView(DetailView):
     context_object_name = "recipe"
     
     def get_context_data(self, **kwargs):
-        print("Inside get_context_data")  # Add this line for debugging
         context = super().get_context_data(**kwargs)
-        
-        # Add this line to print the title of the recipe
-        print("Recipe:", self.object.title)
-
-        # Add this line to print the SQL query
         ingredients_query = RecipeIngredient.objects.filter(recipe=self.object)
-        print("Ingredients Query:", ingredients_query.query)
 
         ingredients = ingredients_query.values_list('ingredient__name', flat=True)
-        print("Ingredients:", ingredients)  # Add this line for debugging
         context['ingredients'] = ingredients
     
         return context
@@ -365,7 +348,7 @@ def search_recipes(request):
 
         if not recipes:
             messages.error(request, "There are no recipes with that combination of ingredients.")
-            chart_image = None  # Corrected line
+            chart_image = None  
 
         return render(request, 'recipes/recipes_list.html', {
             'recipes': recipes,

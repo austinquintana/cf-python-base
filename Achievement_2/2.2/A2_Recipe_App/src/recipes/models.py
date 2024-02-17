@@ -3,6 +3,7 @@ from django.db import models
 from django.db.models.signals import post_save
 from django.contrib.auth.models import User
 from django.shortcuts import reverse
+from cloudinary.models import CloudinaryField
 
 
 class Ingredient(models.Model):
@@ -37,7 +38,7 @@ class Recipe(models.Model):
     description = models.TextField()
     difficulty = models.CharField(max_length=20, default="TBD")
     instructions = models.TextField()
-    pic = models.ImageField(upload_to="recipes", default="no_picture.jpeg")
+    pic = CloudinaryField('recipe_pics', null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recipes")  
     created_at = models.DateTimeField(auto_now_add=True) 
 
